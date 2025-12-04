@@ -1,0 +1,194 @@
+from google.colab import files
+print("请上传你的 kaggle.json（从 https://www.kaggle.com -> Account -> Create New API Token 下载）。")
+print("如果你不想用 Kaggle，请跳过并告诉我，我会给你替代下载方式（Roboflow / 直接下载链接）。")
+uploaded = files.upload()
+
+!git clone https://github.com/pedropro/TACO.git
+!pip install ultralytics
+import os
+# 查看 TACO 文件夹内容
+os.listdir("/content/TACO")
+from google.colab import files
+files.upload()  # 上传你的 kaggle.json
+import os
+import json
+
+# 创建 Kaggle 配置文件夹
+os.makedirs("/root/.kaggle", exist_ok=True)
+
+# 移动 kaggle.json 到配置文件夹
+!mv kaggle.json /root/.kaggle/
+
+# 设置权限
+!chmod 600 /root/.kaggle/kaggle.json
+
+# 验证 kaggle 命令是否可用
+!kaggle datasets list -v
+# 下载垃圾分类数据集
+!kaggle datasets download -d mostafaabla/garbage-classification -p /content/garbage_dataset --unzip
+import os
+
+# 查看数据集文件夹结构
+for root, dirs, files in os.walk("/content/garbage_dataset"):
+    print("Root:", root)
+    print("Dirs:", dirs)
+    print("Files:", files[:5])  # 只显示前 5 个文件
+    print("------")
+import os
+import shutil
+from sklearn.model_selection import train_test_split
+
+# 原始图片路径
+base_dir = "/content/garbage_dataset/garbage_classification"
+
+# YOLO 数据集路径
+yolo_dir = "/content/garbage_yolo"
+os.makedirs(yolo_dir, exist_ok=True)
+
+# 创建文件夹
+for split in ["train", "val"]:
+    os.makedirs(os.path.join(yolo_dir, "images", split), exist_ok=True)
+    os.makedirs(os.path.join(yolo_dir, "labels", split), exist_ok=True)
+
+# 类别列表
+classes = ["biological","brown-glass","cardboard","metal","paper","plastic","trash","white-glass","green-glass"]
+class_map = {cls:i for i, cls in enumerate(classes)}
+
+# 遍历类别，生成 YOLO 标签（全图 bounding box）
+for cls in classes:
+    imgs = os.listdir(os.path.join(base_dir, cls))
+    train_imgs, val_imgs = train_test_split(imgs, test_size=0.2, random_state=42)
+    
+    for split, split_imgs in zip(["train","val"], [train_imgs,val_imgs]):
+        for img_file in split_imgs:
+            src_img_path = os.path.join(base_dir, cls, img_file)
+            dst_img_path = os.path.join(yolo_dir, "images", split, img_file)
+            shutil.copy(src_img_path, dst_img_path)
+            
+            # YOLO 标签
+            txt_file = os.path.splitext(img_file)[0] + ".txt"
+            dst_txt_path = os.path.join(yolo_dir, "labels", split, txt_file)
+            with open(dst_txt_path, "w") as f:
+                f.write(f"{class_map[cls]} 0.5 0.5 1.0 1.0\n")  # x_center y_center width height (全图)
+# 创建 YOLOv8 数据集配置文件
+yolo_yaml = "/content/garbage_yolo/garbage.yaml"
+with open(yolo_yaml, "w") as f:
+    f.write(f"""
+train: /content/garbage_yolo/images/train
+val: /content/garbage_yolo/images/val
+
+nc: {len(classes)}
+names: {classes}
+""")
+
+print("YOLOv8 配置文件已创建：", yolo_yaml)
+from ultralytics import YOLO
+
+# 使用预训练 YOLOv8n 模型
+model = YOLO("yolov8n.pt")
+
+# 训练模型
+model.train(
+    data=yolo_yaml,       # 数据集配置文件
+    epochs=10,            # 训练轮数，可根据 Colab 时间调整
+    imgsz=640,            # 图片大小
+    batch=16,             # batch size
+    project="/content/garbage_yolo_results",  # 保存训练结果
+    name="garbage_model",  # 训练名称
+    exist_ok=True
+)
+
+!git clone https://github.com/pedropro/TACO.git
+!pip install ultralytics
+import os
+# View contents of TACO folder
+os.listdir("/content/TACO")
+from google.colab import files
+files.upload()  # Upload your kaggle.json
+import os
+import json
+
+# Create Kaggle configuration folder
+os.makedirs("/root/.kaggle", exist_ok=True)
+
+# Move kaggle.json to the configuration folder
+!mv kaggle.json /root/.kaggle/
+
+# Set permissions
+!chmod 600 /root/.kaggle/kaggle.json
+
+# Check if kaggle command works
+!kaggle datasets list -v
+# Download garbage classification dataset
+!kaggle datasets download -d mostafaabla/garbage-classification -p /content/garbage_dataset --unzip
+import os
+
+# Check dataset folder structure
+for root, dirs, files in os.walk("/content/garbage_dataset"):
+    print("Root:", root)
+    print("Dirs:", dirs)
+    print("Files:", files[:5])  # Show only first 5 files
+    print("------")
+import os
+import shutil
+from sklearn.model_selection import train_test_split
+
+# Original image path
+base_dir = "/content/garbage_dataset/garbage_classification"
+
+# YOLO dataset path
+yolo_dir = "/content/garbage_yolo"
+os.makedirs(yolo_dir, exist_ok=True)
+
+# Create directories
+for split in ["train", "val"]:
+    os.makedirs(os.path.join(yolo_dir, "images", split), exist_ok=True)
+    os.makedirs(os.path.join(yolo_dir, "labels", split), exist_ok=True)
+
+# Class list
+classes = ["biological","brown-glass","cardboard","metal","paper","plastic","trash","white-glass","green-glass"]
+class_map = {cls:i for i, cls in enumerate(classes)}
+
+# Iterate categories and generate YOLO labels (full-image bounding box)
+for cls in classes:
+    imgs = os.listdir(os.path.join(base_dir, cls))
+    train_imgs, val_imgs = train_test_split(imgs, test_size=0.2, random_state=42)
+    
+    for split, split_imgs in zip(["train","val"], [train_imgs,val_imgs]):
+        for img_file in split_imgs:
+            src_img_path = os.path.join(base_dir, cls, img_file)
+            dst_img_path = os.path.join(yolo_dir, "images", split, img_file)
+            shutil.copy(src_img_path, dst_img_path)
+            
+            # YOLO label
+            txt_file = os.path.splitext(img_file)[0] + ".txt"
+            dst_txt_path = os.path.join(yolo_dir, "labels", split, txt_file)
+            with open(dst_txt_path, "w") as f:
+                f.write(f"{class_map[cls]} 0.5 0.5 1.0 1.0\n")  # x_center y_center width height (full image)
+# Create YOLOv8 dataset config file
+yolo_yaml = "/content/garbage_yolo/garbage.yaml"
+with open(yolo_yaml, "w") as f:
+    f.write(f"""
+train: /content/garbage_yolo/images/train
+val: /content/garbage_yolo/images/val
+
+nc: {len(classes)}
+names: {classes}
+""")
+
+print("YOLOv8 config file created:", yolo_yaml)
+from ultralytics import YOLO
+
+# Use pretrained YOLOv8n model
+model = YOLO("yolov8n.pt")
+
+# Train the model
+model.train(
+    data=yolo_yaml,       # Dataset config file
+    epochs=10,            # Number of training epochs
+    imgsz=640,            # Image size
+    batch=16,             # Batch size
+    project="/content/garbage_yolo_results",  # Save training results
+    name="garbage_model",  # Training name
+    exist_ok=True
+)
